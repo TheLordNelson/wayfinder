@@ -18,9 +18,35 @@
 <body>
 <div id="root"><div id="loading">Loading Wayfinder…</div></div>
 
-<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
-<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
-<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script>
+  window.__wferr = function (msg) {
+    var r = document.getElementById("root");
+    if (r) r.innerHTML =
+      '<div style="font-family:ui-monospace,monospace;white-space:pre-wrap;padding:20px;color:#7a2b2b;font-size:13px;line-height:1.5">Wayfinder hit an error:\n\n' +
+      String(msg).replace(/</g, "&lt;") + "</div>";
+  };
+  window.addEventListener("error", function (e) {
+    window.__wferr((e.error && e.error.stack) || e.message || e);
+  });
+  window.addEventListener("unhandledrejection", function (e) {
+    window.__wferr("Promise error: " + ((e.reason && e.reason.stack) || e.reason));
+  });
+  setTimeout(function () {
+    var r = document.getElementById("root");
+    if (r && /Loading Wayfinder/.test(r.textContent)) {
+      if (typeof React === "undefined" || typeof ReactDOM === "undefined")
+        window.__wferr("React did not load. The CDN scripts are likely blocked on this network or browser. Try a different browser (Safari/Chrome) or network.");
+      else if (typeof Babel === "undefined")
+        window.__wferr("The in-browser compiler (Babel) did not load from the CDN.");
+      else
+        window.__wferr("Scripts loaded but the app did not render within 9s. Screenshot this and any red text.");
+    }
+  }, 9000);
+</script>
+
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react@18.3.1/umd/react.production.min.js"></script>
+<script crossorigin src="https://cdn.jsdelivr.net/npm/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@babel/standalone@7.25.6/babel.min.js"></script>
 
 <script type="text/babel" data-presets="react">
 const { useState, useMemo } = React;
@@ -532,8 +558,12 @@ const stepBtn = { display: "grid", placeItems: "center", background: "transparen
 const iconMini = { display: "grid", placeItems: "center", background: "transparent", border: "none", padding: 4, cursor: "pointer", color: INK_SOFT };
 const inputStyle = { flex: 1, width: "100%", border: "1px solid " + LINE, borderRadius: 10, padding: "10px 12px", fontSize: 15, color: INK, background: PAPER_2, boxSizing: "border-box", outline: "none" };
 
-const root = ReactDOM.createRoot(document.getElementById("root"));
-root.render(<Wayfinder />);
+try {
+  const root = ReactDOM.createRoot(document.getElementById("root"));
+  root.render(<Wayfinder />);
+} catch (e) {
+  window.__wferr((e && e.stack) || e);
+}
 </script>
 </body>
 </html>
