@@ -1,0 +1,539 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<meta name="description" content="Wayfinder — plan your journey, stop by stop." />
+<title>Wayfinder</title>
+<style>
+  * { box-sizing: border-box; }
+  html, body, #root { margin: 0; padding: 0; min-height: 100%; }
+  body { background: #F6F1E4; -webkit-font-smoothing: antialiased; }
+  button:focus-visible, input:focus-visible, textarea:focus-visible {
+    outline: 2px solid #B8860B; outline-offset: 2px;
+  }
+  #loading { font-family: ui-sans-serif, system-ui, sans-serif; color: #3C5A78; padding: 40px 20px; text-align: center; }
+</style>
+</head>
+<body>
+<div id="root"><div id="loading">Loading Wayfinder…</div></div>
+
+<script crossorigin src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script crossorigin src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+
+<script type="text/babel" data-presets="react">
+const { useState, useMemo } = React;
+
+// ---- inline icon set (replaces lucide-react; same {size,color} props) ----
+const S = ({ size = 20, color = "currentColor", children }) => (
+  <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={color}
+       strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">{children}</svg>
+);
+const Plane = (p) => <S {...p}><path d="M17.8 19.2 16 11l3.5-3.5C21 6 21.5 4 21 3c-1-.5-3 0-4.5 1.5L13 8 4.8 6.2c-.5-.1-.9.1-1.1.5l-.3.5c-.2.5-.1 1 .3 1.3L9 12l-2 3H4l-1 1 3 2 2 3 1-1v-3l3-2 3.5 5.3c.3.4.8.5 1.3.3l.5-.2c.4-.3.6-.7.5-1.2z"/></S>;
+const Ship = (p) => <S {...p}><path d="M2 14 12 18 22 14"/><path d="M4.5 14V9H19.5v5"/><path d="M12 3v6"/><path d="M8 9V6h8v3"/></S>;
+const Users = (p) => <S {...p}><path d="M16 21v-2a4 4 0 0 0-4-4H6a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M22 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></S>;
+const Calendar = (p) => <S {...p}><rect x="3" y="4" width="18" height="18" rx="2"/><path d="M16 2v4M8 2v4M3 10h18"/></S>;
+const Wallet = (p) => <S {...p}><path d="M19 7V5a2 2 0 0 0-2-2H5a2 2 0 0 0 0 4h16a1 1 0 0 1 1 1v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V7"/><path d="M18 12h3v3h-3a1.5 1.5 0 0 1 0-3z"/></S>;
+const Sparkles = (p) => <S {...p}><path d="M12 3l1.9 4.6L18.5 9.5 13.9 11.4 12 16 10.1 11.4 5.5 9.5 10.1 7.6z"/><path d="M19 15v3M20.5 16.5h-3"/></S>;
+const Copy = (p) => <S {...p}><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></S>;
+const Check = (p) => <S {...p}><path d="M20 6 9 17l-5-5"/></S>;
+const Plus = (p) => <S {...p}><path d="M12 5v14M5 12h14"/></S>;
+const Minus = (p) => <S {...p}><path d="M5 12h14"/></S>;
+const ChevronRight = (p) => <S {...p}><path d="m9 18 6-6-6-6"/></S>;
+const ChevronLeft = (p) => <S {...p}><path d="m15 18-6-6 6-6"/></S>;
+const Trash2 = (p) => <S {...p}><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m2 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M10 11v6M14 11v6"/></S>;
+const ArrowUp = (p) => <S {...p}><path d="M12 19V5M5 12l7-7 7 7"/></S>;
+const ArrowDown = (p) => <S {...p}><path d="M12 5v14M19 12l-7 7-7-7"/></S>;
+const Compass = (p) => <S {...p}><circle cx="12" cy="12" r="10"/><path d="m16.24 7.76-2.12 6.36-6.36 2.12 2.12-6.36z"/></S>;
+const Home = (p) => <S {...p}><path d="m3 9 9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><path d="M9 22V12h6v10"/></S>;
+const MapPin = (p) => <S {...p}><path d="M20 10c0 6-8 12-8 12s-8-6-8-12a8 8 0 0 1 16 0z"/><circle cx="12" cy="10" r="3"/></S>;
+
+
+// ---- Brand tokens (inline styles — artifacts have no Tailwind JIT for arbitrary hex) ----
+const INK = "#16324F";       // deep navy ink
+const INK_SOFT = "#3C5A78";  // muted navy
+const BRASS = "#B8860B";     // brass gold
+const BRASS_DEEP = "#8C6608";
+const SEA = "#2F7C86";       // ferry teal
+const PAPER = "#F6F1E4";     // warm chart paper
+const PAPER_2 = "#FBF8F0";
+const LINE = "#E4DCC8";
+
+const money = (n) => "$" + Math.round(n).toLocaleString("en-AU");
+const uid = () => Math.random().toString(36).slice(2, 9);
+
+const MONTHS = ["January","February","March","April","May","June","July","August","September","October","November","December"];
+const PEAK = new Set([5, 6, 7, 11]); // Jun, Jul, Aug, Dec (Aus school holidays / Euro peak)
+
+const CABINS = [
+  { id: "economy", label: "Economy", mult: 1.0 },
+  { id: "premium", label: "Premium economy", mult: 1.75 },
+  { id: "business", label: "Business", mult: 3.6 },
+];
+const TIERS = [
+  { id: "comfortable", label: "Comfortable 3★", nightly: 270 },
+  { id: "premium", label: "Premium 4★", nightly: 410 },
+  { id: "luxury", label: "Luxury 5★", nightly: 660 },
+];
+const VIBES = ["Culture & sightseeing", "Beaches & scenery", "Food & wine", "Adventure", "Rest & recharge", "Local life & wandering"];
+
+const SEED_STOPS = [
+  { id: uid(), name: "Canterbury (Reynolds Farm)", nights: 5, mode: "plane", note: "Visiting family" },
+  { id: uid(), name: "French Riviera (Nice)", nights: 4, mode: "plane", note: "" },
+  { id: uid(), name: "Naples", nights: 2, mode: "plane", note: "" },
+  { id: uid(), name: "Ischia", nights: 5, mode: "ferry", note: "" },
+  { id: uid(), name: "Milos", nights: 3, mode: "plane", note: "" },
+  { id: uid(), name: "Mykonos", nights: 2, mode: "ferry", note: "" },
+];
+
+function Wayfinder() {
+  const [step, setStep] = useState(0);
+  const [travellers, setTravellers] = useState(2);
+  const [party, setParty] = useState("Couple");
+  const [vibe, setVibe] = useState(["Culture & sightseeing", "Beaches & scenery"]);
+  const [stops, setStops] = useState(SEED_STOPS);
+  const [newStop, setNewStop] = useState("");
+  const [month, setMonth] = useState(6); // July
+  const [flexible, setFlexible] = useState(true);
+  const [cabin, setCabin] = useState("premium");
+  const [tier, setTier] = useState("comfortable");
+  const [target, setTarget] = useState(20000);
+  const [copied, setCopied] = useState(false);
+
+  const totalNights = useMemo(() => stops.reduce((a, s) => a + s.nights, 0), [stops]);
+  const isPeak = PEAK.has(month);
+
+  const cost = useMemo(() => {
+    const cabinMult = (CABINS.find((c) => c.id === cabin) || CABINS[1]).mult;
+    const nightly = (TIERS.find((t) => t.id === tier) || TIERS[0]).nightly;
+    const season = isPeak ? 1.4 : 1.0;
+    const legs = Math.max(0, stops.length - 1);
+    const flights = travellers * 2200 * cabinMult * season;
+    const intra = legs * travellers * 230;
+    const accom = totalNights * nightly;
+    const food = travellers * 90 * totalNights;
+    const local = totalNights * 55;
+    const exp = stops.length * 300;
+    const total = flights + intra + accom + food + local + exp;
+    return {
+      rows: [
+        { k: "Long-haul flights (" + travellers + " × " + (CABINS.find(c=>c.id===cabin)||{}).label.toLowerCase() + ")", v: flights },
+        { k: "Flights & ferries within the trip", v: intra },
+        { k: "Accommodation (" + totalNights + " nights)", v: accom },
+        { k: "Food & drink", v: food },
+        { k: "Local transport", v: local },
+        { k: "Experiences & splurges", v: exp },
+      ],
+      total, low: total * 0.85, high: total * 1.2,
+    };
+  }, [travellers, cabin, tier, isPeak, stops.length, totalNights]);
+
+  // ---- stop editing ----
+  const setNights = (id, d) => setStops((s) => s.map((x) => x.id === id ? { ...x, nights: Math.max(1, x.nights + d) } : x));
+  const rename = (id, name) => setStops((s) => s.map((x) => x.id === id ? { ...x, name } : x));
+  const cycleMode = (id) => setStops((s) => s.map((x) => x.id === id ? { ...x, mode: x.mode === "plane" ? "ferry" : "plane" } : x));
+  const remove = (id) => setStops((s) => s.filter((x) => x.id !== id));
+  const move = (i, d) => setStops((s) => {
+    const n = [...s]; const j = i + d;
+    if (j < 0 || j >= n.length) return s;
+    [n[i], n[j]] = [n[j], n[i]]; return n;
+  });
+  const add = () => {
+    const name = newStop.trim();
+    if (!name) return;
+    setStops((s) => [...s, { id: uid(), name, nights: 3, mode: "plane", note: "" }]);
+    setNewStop("");
+  };
+
+  const prompt = useMemo(() => buildPrompt({ travellers, party, vibe, stops, month, flexible, cabin, tier, target, totalNights, cost }), [travellers, party, vibe, stops, month, flexible, cabin, tier, target, totalNights, cost]);
+
+  const doCopy = async () => {
+    try {
+      await navigator.clipboard.writeText(prompt);
+      setCopied(true); setTimeout(() => setCopied(false), 1800);
+    } catch {
+      const ta = document.createElement("textarea");
+      ta.value = prompt; document.body.appendChild(ta); ta.select();
+      try { document.execCommand("copy"); setCopied(true); setTimeout(() => setCopied(false), 1800); } catch {}
+      document.body.removeChild(ta);
+    }
+  };
+
+  const STEPS = ["Welcome", "Travellers", "Route & nights", "When", "Style", "Estimate", "Your prompt"];
+  const go = (d) => setStep((s) => Math.min(STEPS.length - 1, Math.max(0, s + d)));
+
+  return (
+    <div style={{ background: PAPER, minHeight: "100vh", color: INK, fontFamily: "ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif" }}>
+      <div style={{ maxWidth: 560, margin: "0 auto", paddingBottom: 96 }}>
+
+        {/* Header */}
+        <header style={{ padding: "18px 20px 14px", borderBottom: "1px solid " + LINE }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+            <div style={{ width: 34, height: 34, borderRadius: 8, background: INK, display: "grid", placeItems: "center", boxShadow: "0 1px 0 " + BRASS_DEEP }}>
+              <Compass size={19} color={PAPER_2} />
+            </div>
+            <div>
+              <div style={{ fontFamily: "Georgia, 'Times New Roman', serif", fontSize: 22, fontWeight: 700, letterSpacing: 0.5, lineHeight: 1 }}>Wayfinder</div>
+              <div style={{ fontSize: 11.5, color: INK_SOFT, letterSpacing: 1.2, textTransform: "uppercase", marginTop: 3 }}>Plan your journey, stop by stop</div>
+            </div>
+          </div>
+          {step > 0 && (
+            <div style={{ display: "flex", gap: 6, marginTop: 14 }}>
+              {STEPS.slice(1).map((s, i) => (
+                <div key={s} title={s} style={{ height: 4, flex: 1, borderRadius: 2, background: i + 1 <= step ? BRASS : LINE, transition: "background .3s" }} />
+              ))}
+            </div>
+          )}
+        </header>
+
+        <main style={{ padding: "20px" }}>
+
+          {/* 0 — Welcome */}
+          {step === 0 && (
+            <section>
+              <Eyebrow>A guided plan</Eyebrow>
+              <h1 style={{ fontFamily: "Georgia, serif", fontSize: 30, lineHeight: 1.15, margin: "6px 0 12px", fontWeight: 700 }}>
+                Build your holiday one stop at a time.
+              </h1>
+              <p style={{ color: INK_SOFT, fontSize: 15.5, lineHeight: 1.6, margin: "0 0 20px" }}>
+                We'll shape it together in the right order — who's coming, where you'll go, how long at each stop, when you travel, and how you like to do it. Adjust anything as you go. At the end you'll get a ready-made brief to hand to Claude, who'll turn it into a full, costed itinerary.
+              </p>
+              <RouteMini stops={stops} />
+              <button onClick={() => go(1)} style={primaryBtn}>
+                Start planning <ChevronRight size={18} />
+              </button>
+            </section>
+          )}
+
+          {/* 1 — Travellers */}
+          {step === 1 && (
+            <section>
+              <StepHead icon={<Users size={18} />} n="1" title="Who's travelling" />
+              <Label>Party</Label>
+              <ChipRow options={["Solo", "Couple", "Family", "Friends"]} value={party} onPick={setParty} />
+              <div style={{ height: 18 }} />
+              <Label>How many travellers</Label>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                <Stepper onDown={() => setTravellers((v) => Math.max(1, v - 1))} onUp={() => setTravellers((v) => Math.min(12, v + 1))} value={travellers} />
+                <span style={{ color: INK_SOFT, fontSize: 14 }}>{travellers === 1 ? "traveller" : "travellers"}</span>
+              </div>
+              <div style={{ height: 18 }} />
+              <Label>The vibe <span style={{ color: INK_SOFT, fontWeight: 400 }}>(pick any)</span></Label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {VIBES.map((v) => {
+                  const on = vibe.includes(v);
+                  return (
+                    <button key={v} onClick={() => setVibe((cur) => on ? cur.filter((x) => x !== v) : [...cur, v])}
+                      style={{ ...chip, background: on ? INK : PAPER_2, color: on ? PAPER_2 : INK, borderColor: on ? INK : LINE }}>
+                      {v}
+                    </button>
+                  );
+                })}
+              </div>
+            </section>
+          )}
+
+          {/* 2 — Route & nights (the spine) */}
+          {step === 2 && (
+            <section>
+              <StepHead icon={<MapPin size={18} />} n="2" title="Route & nights" />
+              <p style={{ color: INK_SOFT, fontSize: 14, margin: "0 0 16px", lineHeight: 1.55 }}>
+                Your route runs top to bottom. Adjust nights, reorder, rename or remove stops — tap the leg icon to switch a hop between flight and ferry.
+              </p>
+              <Spine stops={stops} onNights={setNights} onMove={move} onRemove={remove} onRename={rename} onMode={cycleMode} />
+              <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+                <input value={newStop} onChange={(e) => setNewStop(e.target.value)} onKeyDown={(e) => e.key === "Enter" && add()}
+                  placeholder="Add a stop…" style={inputStyle} />
+                <button onClick={add} style={{ ...ghostBtn, paddingInline: 14 }}><Plus size={18} /></button>
+              </div>
+            </section>
+          )}
+
+          {/* 3 — When */}
+          {step === 3 && (
+            <section>
+              <StepHead icon={<Calendar size={18} />} n="3" title="When do you travel" />
+              <Label>Departure month</Label>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                {MONTHS.map((m, i) => (
+                  <button key={m} onClick={() => setMonth(i)} style={{ ...chip, fontSize: 13, background: month === i ? INK : PAPER_2, color: month === i ? PAPER_2 : INK, borderColor: month === i ? INK : LINE }}>
+                    {m.slice(0, 3)}
+                  </button>
+                ))}
+              </div>
+              <label style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 18, fontSize: 14.5, cursor: "pointer" }}>
+                <input type="checkbox" checked={flexible} onChange={(e) => setFlexible(e.target.checked)} style={{ width: 18, height: 18, accentColor: INK }} />
+                My dates are flexible by a few days
+              </label>
+              {isPeak && (
+                <Callout tone="warn">
+                  <strong>{MONTHS[month]} is peak season.</strong> Ferries run at their highest frequency, but long-haul fares and island prices hit their yearly high, and it's hot and busy. Booking early protects price and availability.
+                </Callout>
+              )}
+              {!isPeak && (
+                <Callout tone="good">
+                  <strong>{MONTHS[month]} is shoulder or off-peak.</strong> Expect calmer crowds and better fares — just double-check seasonal ferries, which thin out outside roughly April–October.
+                </Callout>
+              )}
+            </section>
+          )}
+
+          {/* 4 — Style & budget */}
+          {step === 4 && (
+            <section>
+              <StepHead icon={<Wallet size={18} />} n="4" title="Style & budget" />
+              <Label>Long-haul cabin</Label>
+              <ChipRow options={CABINS.map((c) => c.label)} value={(CABINS.find((c) => c.id === cabin) || {}).label} onPick={(l) => setCabin(CABINS.find((c) => c.label === l).id)} />
+              <div style={{ height: 18 }} />
+              <Label>Accommodation</Label>
+              <ChipRow options={TIERS.map((t) => t.label)} value={(TIERS.find((t) => t.id === tier) || {}).label} onPick={(l) => setTier(TIERS.find((t) => t.label === l).id)} />
+              <div style={{ height: 18 }} />
+              <Label>Budget target (AUD, for {travellers})</Label>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 18, color: BRASS_DEEP }}>$</span>
+                <input type="number" value={target} min={0} step={500} onChange={(e) => setTarget(Number(e.target.value) || 0)} style={{ ...inputStyle, fontFamily: "ui-monospace, monospace" }} />
+              </div>
+              <div style={{ display: "flex", gap: 8, marginTop: 10 }}>
+                {[15000, 20000, 30000].map((p) => (
+                  <button key={p} onClick={() => setTarget(p)} style={{ ...chip, fontFamily: "ui-monospace, monospace", background: target === p ? INK : PAPER_2, color: target === p ? PAPER_2 : INK, borderColor: target === p ? INK : LINE }}>
+                    {money(p)}
+                  </button>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* 5 — Estimate */}
+          {step === 5 && (
+            <section>
+              <StepHead icon={<Sparkles size={18} />} n="5" title="Rough cost estimate" />
+              <p style={{ color: INK_SOFT, fontSize: 13.5, margin: "0 0 14px" }}>Ballpark planning ranges for {travellers} — not quotes. They shift with your choices.</p>
+              <div style={{ border: "1px solid " + LINE, borderRadius: 12, overflow: "hidden", background: PAPER_2 }}>
+                {cost.rows.map((r, i) => (
+                  <div key={r.k} style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "11px 14px", borderTop: i ? "1px solid " + LINE : "none", fontSize: 14 }}>
+                    <span style={{ color: INK_SOFT }}>{r.k}</span>
+                    <span style={{ fontFamily: "ui-monospace, monospace" }}>{money(r.v)}</span>
+                  </div>
+                ))}
+                <div style={{ display: "flex", justifyContent: "space-between", gap: 12, padding: "13px 14px", borderTop: "2px solid " + INK, background: PAPER, fontWeight: 700 }}>
+                  <span>Indicative total</span>
+                  <span style={{ fontFamily: "ui-monospace, monospace" }}>{money(cost.low)} – {money(cost.high)}</span>
+                </div>
+              </div>
+              <BudgetVerdict low={cost.low} high={cost.high} target={target} cabin={cabin} />
+            </section>
+          )}
+
+          {/* 6 — Prompt */}
+          {step === 6 && (
+            <section>
+              <StepHead icon={<Compass size={18} />} n="6" title="Your planning brief" />
+              <p style={{ color: INK_SOFT, fontSize: 14, margin: "0 0 12px", lineHeight: 1.55 }}>
+                Here's your trip written up as a brief for Claude. Copy it into a chat and Claude will sequence the route, validate the transport, plan your days, and cost it out.
+              </p>
+              <button onClick={doCopy} style={{ ...primaryBtn, marginBottom: 12 }}>
+                {copied ? <><Check size={18} /> Copied</> : <><Copy size={18} /> Copy brief</>}
+              </button>
+              <textarea readOnly value={prompt} style={{ width: "100%", height: 300, resize: "vertical", padding: 14, border: "1px solid " + LINE, borderRadius: 12, background: PAPER_2, color: INK, fontFamily: "ui-monospace, monospace", fontSize: 12.5, lineHeight: 1.55, boxSizing: "border-box" }} />
+            </section>
+          )}
+        </main>
+      </div>
+
+      {/* Sticky footer */}
+      {step > 0 && (
+      <footer style={{ position: "fixed", bottom: 0, left: 0, right: 0, borderTop: "1px solid " + LINE, background: PAPER_2, backdropFilter: "blur(6px)" }}>
+        <div style={{ maxWidth: 560, margin: "0 auto", padding: "10px 20px", display: "flex", alignItems: "center", gap: 12 }}>
+          {step >= 2 && (
+            <div style={{ display: "flex", flexDirection: "column", lineHeight: 1.15 }}>
+              <span style={{ fontFamily: "ui-monospace, monospace", fontSize: 16, fontWeight: 700 }}>{totalNights} nights</span>
+              <span style={{ fontSize: 11.5, color: INK_SOFT }}>{money(cost.low)}–{money(cost.high)} · {stops.length} stops</span>
+            </div>
+          )}
+          <div style={{ marginLeft: "auto", display: "flex", gap: 8 }}>
+            {step > 0 && <button onClick={() => go(-1)} style={ghostBtn}><ChevronLeft size={18} /> Back</button>}
+            {step > 0 && step < 6 && <button onClick={() => go(1)} style={primaryBtn}>Next <ChevronRight size={18} /></button>}
+            {step === 6 && <button onClick={doCopy} style={primaryBtn}>{copied ? <><Check size={18}/> Copied</> : <><Copy size={18} /> Copy</>}</button>}
+          </div>
+        </div>
+      </footer>
+      )}
+    </div>
+  );
+}
+
+// ---------- prompt builder ----------
+function buildPrompt({ travellers, party, vibe, stops, month, flexible, cabin, tier, target, totalNights, cost }) {
+  const cabinLabel = (CABINS.find((c) => c.id === cabin) || {}).label;
+  const tierLabel = (TIERS.find((t) => t.id === tier) || {}).label;
+  const routeLines = stops.map((s, i) => `  ${i + 1}. ${s.name} — ${s.nights} night${s.nights > 1 ? "s" : ""}${s.mode === "ferry" ? " (arrive by ferry)" : ""}${s.note ? ` [${s.note}]` : ""}`).join("\n");
+  return (
+`You're my travel planner. Help me build a detailed, well-sequenced holiday itinerary, one layer at a time, and let me adjust as we go.
+
+Please work in this order, checking in before moving on:
+1. Sequence my route so we never backtrack.
+2. Validate the real flights and ferries between each stop (flag anything seasonal or awkward).
+3. Flag any stop where the nights look too short once travel days are counted.
+4. Note peak-season cost, heat or crowd implications for my dates.
+5. Give a rough AUD cost estimate and tell me if I'm over my target — with levers to get back under.
+Hold off on suggesting daily activities until I've told you what I enjoy at each stop.
+
+WHO
+- ${travellers} traveller${travellers > 1 ? "s" : ""} (${party.toLowerCase()})
+- Trip vibe: ${vibe.join(", ") || "open"}
+
+WHEN
+- Departure: ${MONTHS[month]}${flexible ? " (dates flexible by a few days)" : ""}
+
+ROUTE & NIGHTS (${totalNights} nights total)
+${routeLines}
+
+STYLE & BUDGET
+- Long-haul cabin: ${cabinLabel}
+- Accommodation: ${tierLabel}, self-catering where it suits
+- Budget target: ${money(target)} for ${travellers}
+- My own rough estimate so far: ${money(cost.low)}–${money(cost.high)}
+
+Please build from here, flag anything that won't work, keep it easy to adjust, and produce a clean day-by-day plan once we've settled the details.`
+  );
+}
+
+// ---------- small components ----------
+function Eyebrow({ children }) {
+  return <div style={{ fontSize: 11.5, letterSpacing: 1.6, textTransform: "uppercase", color: BRASS_DEEP, fontWeight: 700 }}>{children}</div>;
+}
+function StepHead({ icon, n, title }) {
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
+      <div style={{ width: 30, height: 30, borderRadius: 8, background: INK, color: PAPER_2, display: "grid", placeItems: "center" }}>{icon}</div>
+      <div style={{ fontFamily: "Georgia, serif", fontSize: 21, fontWeight: 700 }}>{title}</div>
+      <div style={{ marginLeft: "auto", fontFamily: "ui-monospace, monospace", fontSize: 12, color: INK_SOFT, letterSpacing: 1 }}>0{n} / 06</div>
+    </div>
+  );
+}
+function Label({ children }) {
+  return <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8, letterSpacing: 0.2 }}>{children}</div>;
+}
+function ChipRow({ options, value, onPick }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+      {options.map((o) => (
+        <button key={o} onClick={() => onPick(o)} style={{ ...chip, background: value === o ? INK : PAPER_2, color: value === o ? PAPER_2 : INK, borderColor: value === o ? INK : LINE }}>{o}</button>
+      ))}
+    </div>
+  );
+}
+function Stepper({ onDown, onUp, value }) {
+  return (
+    <div style={{ display: "inline-flex", alignItems: "center", border: "1px solid " + LINE, borderRadius: 10, overflow: "hidden", background: PAPER_2 }}>
+      <button onClick={onDown} style={stepBtn} aria-label="decrease"><Minus size={16} /></button>
+      <span style={{ minWidth: 36, textAlign: "center", fontFamily: "ui-monospace, monospace", fontSize: 16, fontWeight: 700 }}>{value}</span>
+      <button onClick={onUp} style={stepBtn} aria-label="increase"><Plus size={16} /></button>
+    </div>
+  );
+}
+function Callout({ tone, children }) {
+  const c = tone === "warn" ? BRASS_DEEP : SEA;
+  const bg = tone === "warn" ? "#FBF3DE" : "#E8F2F1";
+  return <div style={{ marginTop: 16, padding: "12px 14px", borderRadius: 10, background: bg, borderLeft: "3px solid " + c, fontSize: 13.5, lineHeight: 1.55, color: INK }}>{children}</div>;
+}
+function BudgetVerdict({ low, high, target, cabin }) {
+  const mid = (low + high) / 2;
+  const over = mid > target;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <Callout tone={over ? "warn" : "good"}>
+        {over ? (
+          <>Your midpoint (~{money(mid)}) sits above your {money(target)} target. Biggest lever: {cabin !== "economy" ? "fly economy long-haul (saves a few thousand for two)" : "trim nights or drop to comfortable stays"}, then choose simpler accommodation or shave a night or two.</>
+        ) : (
+          <>You're tracking within your {money(target)} target — nice. Room to add a splurge or two if you'd like.</>
+        )}
+      </Callout>
+    </div>
+  );
+}
+
+// ---------- route spine (signature element) ----------
+function Spine({ stops, onNights, onMove, onRemove, onRename, onMode }) {
+  return (
+    <div>
+      <Leg label="from home" mode="plane" first />
+      {stops.map((s, i) => (
+        <div key={s.id}>
+          {i > 0 && <Leg label={s.mode === "ferry" ? "ferry" : "fly"} mode={s.mode} onClick={() => onMode(s.id)} />}
+          <StopNode s={s} i={i} last={i === stops.length - 1} onNights={onNights} onMove={onMove} onRemove={onRemove} onRename={onRename} />
+        </div>
+      ))}
+      <Leg label="home" mode="plane" terminal />
+    </div>
+  );
+}
+function Leg({ label, mode, first, terminal, onClick }) {
+  const Icon = mode === "ferry" ? Ship : (first || terminal ? Home : Plane);
+  const showHome = first || terminal;
+  return (
+    <div style={{ display: "flex", alignItems: "center", gap: 10, paddingLeft: 15, height: 34 }}>
+      <div style={{ width: 2, height: "100%", background: LINE }} />
+      <button onClick={onClick} disabled={!onClick} style={{ display: "flex", alignItems: "center", gap: 6, border: "none", background: "transparent", cursor: onClick ? "pointer" : "default", color: showHome ? INK_SOFT : (mode === "ferry" ? SEA : INK_SOFT), fontSize: 11.5, letterSpacing: 0.5, textTransform: "uppercase", padding: 0 }}>
+        {showHome ? <Home size={14} /> : <Icon size={14} />}
+        {label}{onClick && <span style={{ fontSize: 10, opacity: 0.6 }}>(tap to switch)</span>}
+      </button>
+    </div>
+  );
+}
+function StopNode({ s, i, last, onNights, onMove, onRemove, onRename }) {
+  return (
+    <div style={{ display: "flex", gap: 10, alignItems: "stretch" }}>
+      {/* rail + node */}
+      <div style={{ position: "relative", width: 32, display: "flex", justifyContent: "center" }}>
+        <div style={{ position: "absolute", top: 0, bottom: 0, width: 2, background: LINE }} />
+        <div style={{ position: "relative", marginTop: 16, width: 16, height: 16, borderRadius: 8, background: BRASS, border: "3px solid " + PAPER, boxShadow: "0 0 0 1px " + BRASS_DEEP, zIndex: 1 }} />
+      </div>
+      {/* card */}
+      <div style={{ flex: 1, background: PAPER_2, border: "1px solid " + LINE, borderRadius: 12, padding: "10px 12px", marginBottom: 2 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+          <input value={s.name} onChange={(e) => onRename(s.id, e.target.value)}
+            style={{ flex: 1, border: "none", background: "transparent", fontSize: 15, fontWeight: 700, color: INK, padding: 0, outline: "none" }} />
+          <button onClick={() => onMove(i, -1)} style={iconMini} aria-label="move up"><ArrowUp size={14} /></button>
+          <button onClick={() => onMove(i, 1)} style={iconMini} aria-label="move down"><ArrowDown size={14} /></button>
+          <button onClick={() => onRemove(s.id)} style={{ ...iconMini, color: "#A24A3A" }} aria-label="remove"><Trash2 size={14} /></button>
+        </div>
+        {s.note ? <div style={{ fontSize: 12, color: SEA, marginTop: 2 }}>{s.note}</div> : null}
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 8 }}>
+          <div style={{ display: "inline-flex", alignItems: "center", border: "1px solid " + LINE, borderRadius: 8, overflow: "hidden" }}>
+            <button onClick={() => onNights(s.id, -1)} style={{ ...stepBtn, padding: "5px 9px" }}><Minus size={14} /></button>
+            <span style={{ minWidth: 46, textAlign: "center", fontFamily: "ui-monospace, monospace", fontSize: 13.5, fontWeight: 700 }}>{s.nights} nt</span>
+            <button onClick={() => onNights(s.id, 1)} style={{ ...stepBtn, padding: "5px 9px" }}><Plus size={14} /></button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+function RouteMini({ stops }) {
+  return (
+    <div style={{ display: "flex", flexWrap: "wrap", gap: 6, alignItems: "center", padding: "12px 14px", border: "1px dashed " + LINE, borderRadius: 12, background: PAPER_2, marginBottom: 20 }}>
+      {stops.map((s, i) => (
+        <React.Fragment key={s.id}>
+          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{s.name.split(" (")[0]}</span>
+          {i < stops.length - 1 && (s.mode === "ferry" ? <Ship size={13} color={SEA} /> : <Plane size={13} color={INK_SOFT} />)}
+        </React.Fragment>
+      ))}
+    </div>
+  );
+}
+
+// ---------- inline style objects ----------
+const primaryBtn = { display: "inline-flex", alignItems: "center", justifyContent: "center", gap: 8, background: INK, color: PAPER_2, border: "none", borderRadius: 10, padding: "11px 18px", fontSize: 15, fontWeight: 700, cursor: "pointer", width: "auto" };
+const ghostBtn = { display: "inline-flex", alignItems: "center", gap: 4, background: PAPER_2, color: INK, border: "1px solid " + LINE, borderRadius: 10, padding: "9px 12px", fontSize: 14, fontWeight: 600, cursor: "pointer" };
+const chip = { border: "1px solid " + LINE, borderRadius: 999, padding: "8px 14px", fontSize: 13.5, fontWeight: 600, cursor: "pointer", transition: "all .15s" };
+const stepBtn = { display: "grid", placeItems: "center", background: "transparent", border: "none", padding: "8px 12px", cursor: "pointer", color: INK };
+const iconMini = { display: "grid", placeItems: "center", background: "transparent", border: "none", padding: 4, cursor: "pointer", color: INK_SOFT };
+const inputStyle = { flex: 1, width: "100%", border: "1px solid " + LINE, borderRadius: 10, padding: "10px 12px", fontSize: 15, color: INK, background: PAPER_2, boxSizing: "border-box", outline: "none" };
+
+const root = ReactDOM.createRoot(document.getElementById("root"));
+root.render(<Wayfinder />);
+</script>
+</body>
+</html>
