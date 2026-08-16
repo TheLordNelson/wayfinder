@@ -1,2 +1,0 @@
-# wayfinder
-Travel agent
